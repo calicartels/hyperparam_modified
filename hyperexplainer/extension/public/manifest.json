@@ -1,0 +1,17 @@
+{
+    "manifest_version": 3,
+    "name": "HyperExplainer",
+    "version": "1.0.0",
+    "description": "Explain and compare hyperparameters in any code snippet.",
+    "permissions": ["storage", "activeTab", "scripting"],
+    "action": {
+      "default_popup": "popup.html"
+    },
+    "content_scripts": [
+      {
+        "matches": ["*://chat.openai.com/*", "<all_urls>"],
+        "js": ["content.js"]
+      }
+    ],
+    "host_permissions": ["<all_urls>"]
+  }
