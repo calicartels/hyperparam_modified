@@ -17,6 +17,7 @@ function App() {
   }, []);
 
   const analyze = async () => {
+    console.log("Analyze button clicked!");
     setLoading(true);
     const resp = await fetch(`${BACKEND_URL}/analyze`, {
       method: "POST",

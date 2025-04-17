@@ -15,11 +15,53 @@ genai.configure(api_key=api_key)
 
 def extract_hyperparameters(code: str) -> dict:
     """
-    Finds assignments like `learning_rate = 0.001` or `batch_size=32`
-    Returns { name: value_str }
+    Uses Gemini to identify all parameters in the code
     """
-    pattern = re.compile(r"(\w+)\s*=\s*([0-9]+(?:\.[0-9]+)?)")
-    return {m.group(1): m.group(2) for m in pattern.finditer(code)}
+    try:
+        # Use the appropriate model
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        
+        prompt = """
+        Analyze this machine learning code and identify ALL parameters, including:
+        - Hyperparameters (learning rate, batch size, epochs, etc.)
+        - Model architecture parameters (layers, units, activation functions)
+        - Model types (SVM, neural network, etc.)
+        - Optimizer choices
+        - Loss functions
+        - Any other configurable options
+        
+        Return ONLY a JSON object with parameter names as keys and values as strings.
+        Example: {"learning_rate": "0.001", "optimizer": "Adam", "activation": "relu", "model_type": "Sequential", "dropout": "0.5"}
+        
+        CODE:
+        ```
+        {code}
+        ```
+        """
+        
+        response = model.generate_content(prompt.format(code=code))
+        
+        # Parse JSON response
+        import json
+        import re
+        
+        # Try to extract JSON from the response
+        json_pattern = r'\{.*\}'
+        json_match = re.search(json_pattern, response.text, re.DOTALL)
+        
+        if json_match:
+            try:
+                return json.loads(json_match.group(0))
+            except json.JSONDecodeError:
+                print(f"Failed to parse JSON in response: {response.text}")
+                return {}
+        else:
+            print(f"No JSON found in response: {response.text}")
+            return {}
+        
+    except Exception as e:
+        print(f"Error with Gemini API: {str(e)}")
+        return {}
 
 def explain_hyperparameter(name: str, value: str) -> str:
     """
