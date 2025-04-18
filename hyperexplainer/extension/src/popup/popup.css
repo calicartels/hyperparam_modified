@@ -1,0 +1,52 @@
+.popup-container {
+    width: 340px;
+    padding: 16px;
+    font-family: sans-serif;
+  }
+  
+  h1 {
+    margin: 0 0 12px;
+    color: #4f46e5;
+  }
+  
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  
+  .card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  .card:hover {
+    background: #f9f9ff;
+  }
+  
+  .card-name {
+    font-weight: bold;
+  }
+  
+  .card-value {
+    color: #4f46e5;
+    margin: 0 8px;
+  }
+  
+  .card-arrow {
+    color: #888;
+  }
+  
+  .hint {
+    color: #888;
+    font-style: italic;
+  }
