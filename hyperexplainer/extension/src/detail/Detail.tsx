@@ -8,6 +8,7 @@ interface AlternativeValue {
   value: string;
   direction: "higher" | "lower";
   effect: string;
+  complexity?: "basic" | "intermediate" | "advanced";
 }
 
 interface Explanation {
@@ -44,6 +45,7 @@ function DetailApp() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("parameter");
   const [impact, setImpact] = useState("Medium");
+  const [complexityFilter, setComplexityFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (name) {
@@ -76,21 +78,28 @@ function DetailApp() {
       const data = (await resp.json()) as Partial<Explanation>;
       console.log("[HyperExplainer][Detail] Response JSON:", data);
 
-      // Transform alternativeValues if necessary
-      let processedAlternativeValues = data.alternativeValues || [];
-      
       // Validate received object and ensure defaults
       const explanation: Explanation = {
-        importance: data.importance || `The ${name} parameter is crucial for model performance as it directly impacts how the model learns from data.`,
-        definition: data.definition || `The ${name} parameter controls an aspect of model training or architecture.`,
-        currentValueAnalysis: data.currentValueAnalysis || `The value ${safeValue} is a common setting that provides a balance of performance and generalization.`,
-        alternativeValues: processedAlternativeValues,
-        bestPractices: data.bestPractices || "It's typically recommended to start with the default value and adjust based on validation performance.",
-        tradeOffs: data.tradeOffs || "Modifying this parameter often involves a tradeoff between training speed, model performance, and generalization ability.",
-        impactVisualization: data.impactVisualization || `Visualizing the effect of ${name} would show how different values impact the model's learning curve and final performance.`,
+        importance: data.importance || "",
+        definition: data.definition || "",
+        currentValueAnalysis: data.currentValueAnalysis || "",
+        alternativeValues: data.alternativeValues || [],
+        bestPractices: data.bestPractices || "",
+        tradeOffs: data.tradeOffs || "",
+        impactVisualization: data.impactVisualization || "",
       };
 
       setExpl(explanation);
+      
+      // Update impact based on parameter name if not set
+      if (name.toLowerCase().includes('learning_rate') || 
+          name.toLowerCase().includes('optimizer') || 
+          name.toLowerCase().includes('loss')) {
+        setImpact("High");
+      } else if (name.toLowerCase().includes('dropout') || 
+                name.toLowerCase().includes('batch_size')) {
+        setImpact("Medium");
+      }
     } catch (e: any) {
       console.error("[HyperExplainer][Detail] fetch failed:", e);
       setError(e.message || "Unknown error");
@@ -141,11 +150,20 @@ function DetailApp() {
   const renderAlternativeCard = (alt: any, index: number) => {
     // Handle object format
     if (typeof alt === 'object' && alt !== null) {
+      const complexityClass = alt.complexity ? `complexity-${alt.complexity}` : '';
+      
       return (
-        <div key={index} className="alternative-card">
+        <div key={index} className={`alternative-card ${complexityClass}`}>
           <div className="alternative-value">{alt.value || ""}</div>
-          <div className={`alternative-label ${alt.direction || "higher"}`}>
-            {alt.direction || "higher"}
+          <div className="alternative-metadata">
+            <div className={`alternative-label ${alt.direction || "higher"}`}>
+              {alt.direction || "higher"}
+            </div>
+            {alt.complexity && (
+              <div className={`complexity-badge ${alt.complexity}`}>
+                {alt.complexity}
+              </div>
+            )}
           </div>
           <p>{alt.effect || ""}</p>
         </div>
@@ -160,10 +178,33 @@ function DetailApp() {
     return (
       <div key={index} className="alternative-card">
         <div className="alternative-value">{firstWord}</div>
-        <div className={`alternative-label ${direction}`}>{direction}</div>
+        <div className={`alternative-label ${direction}`}>
+          {direction}
+        </div>
         <p>{rest}</p>
       </div>
     );
+  };
+
+  // Filter alternatives based on complexity
+  const getFilteredAlternatives = () => {
+    if (!expl || !Array.isArray(expl.alternativeValues)) {
+      return [];
+    }
+
+    // If no filter or the alternatives don't have complexity, return all
+    if (!complexityFilter) {
+      return expl.alternativeValues;
+    }
+
+    // Filter by complexity
+    return expl.alternativeValues.filter(alt => {
+      if (typeof alt === 'object' && alt !== null && alt.complexity) {
+        return alt.complexity === complexityFilter;
+      }
+      // For alternatives without complexity, include them only in 'all' view
+      return false;
+    });
   };
 
   return (
@@ -266,40 +307,73 @@ model.compile(loss='categorical_crossentropy',
               </h1>
               <div className="ai-badge">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M2 17L12 22L22 17" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M2 12L12 17L22 12" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 AI Powered
               </div>
             </div>
 
             <div className="section">
-              <h3>Definition</h3>
-              <p>{expl.definition}</p>
+            <h3>Definition</h3>
+            <p>{expl.definition}</p>
             </div>
 
             <div className="section">
-              <h3>Current Value Analysis</h3>
-              <p>{expl.currentValueAnalysis}</p>
+            <h3>Current Value Analysis</h3>
+            <p>{expl.currentValueAnalysis}</p>
             </div>
 
             <div className="section">
               <h3>Alternative Values</h3>
+              
+              {/* Complexity filter tabs */}
+              <div className="complexity-tabs">
+                <button 
+                  className={`complexity-tab ${complexityFilter === null ? 'active' : ''}`}
+                  onClick={() => setComplexityFilter(null)}
+                >
+                  All
+                </button>
+                <button 
+                  className={`complexity-tab basic ${complexityFilter === 'basic' ? 'active' : ''}`}
+                  onClick={() => setComplexityFilter('basic')}
+                >
+                  Basic
+                </button>
+                <button 
+                  className={`complexity-tab intermediate ${complexityFilter === 'intermediate' ? 'active' : ''}`}
+                  onClick={() => setComplexityFilter('intermediate')}
+                >
+                  Intermediate
+                </button>
+                <button 
+                  className={`complexity-tab advanced ${complexityFilter === 'advanced' ? 'active' : ''}`}
+                  onClick={() => setComplexityFilter('advanced')}
+                >
+                  Advanced
+                </button>
+              </div>
+              
               <div className="alternative-values">
                 {Array.isArray(expl.alternativeValues) && 
-                 expl.alternativeValues.slice(0, 2).map((alt, i) => renderAlternativeCard(alt, i))}
+                 getFilteredAlternatives().map((alt, i) => renderAlternativeCard(alt, i))}
               </div>
+              
+              {getFilteredAlternatives().length === 0 && (
+                <p className="no-alternatives">No alternatives match the selected complexity level.</p>
+              )}
             </div>
 
             <div className="section">
-              <h3>Best Practices</h3>
-              <p>{expl.bestPractices}</p>
+            <h3>Best Practices</h3>
+            <p>{expl.bestPractices}</p>
             </div>
 
             <div className="section">
-              <h3>Trade-offs</h3>
-              <p>{expl.tradeOffs}</p>
+            <h3>Trade-offs</h3>
+            <p>{expl.tradeOffs}</p>
             </div>
 
             <div className="tab-container">

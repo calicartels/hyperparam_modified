@@ -60,25 +60,58 @@ def explain_hyperparameter(name: str, value: str) -> dict:
     Calls the Gemini API to explain one hyperparameter.
     Returns a structured JSON object with comprehensive explanation fields.
     """
-    prompt = f"""
-Provide a comprehensive, educational explanation of the hyperparameter **{name}** (current value: {value}).
+    # Special case for metrics parameter which was causing issues
+    if name.lower() == "metrics":
+        prompt = f"""
+        Create a completely original explanation of the evaluation metric "{value}" in machine learning.
+        
+        Focus on explaining:
+        - What "{value}" specifically measures and how it's calculated
+        - Why selecting evaluation metrics like this is important
+        - How this metric compares to other common evaluation metrics
+        - When this metric is most appropriate to use
+        
+        Structure your response as a valid JSON with these keys:
+        "importance": Why selecting appropriate metrics matters (3-4 original sentences)
+        "definition": Technical explanation of what evaluation metrics are (3-4 original sentences)
+        "currentValueAnalysis": Analysis of "{value}" specifically (3-4 original sentences) 
+        "alternativeValues": Array of 4-6 alternative metrics, each with:
+          * "value": Name of an alternative metric
+          * "direction": "lower" or "higher" (indicating if it's more or less strict/sensitive)
+          * "effect": What this alternative metric measures (2-3 sentences)
+          * "complexity": "basic", "intermediate", or "advanced"
+        "bestPractices": Advice for choosing and using metrics (3-4 original sentences)
+        "tradeOffs": Insights about metric selection trade-offs (3-4 original sentences)
+        "impactVisualization": How metrics can be visualized (3-4 original sentences)
 
-Structure your response EXACTLY as a JSON object with these keys:
-- "importance": Explain why this parameter matters and its impact on model performance (2-3 sentences)
-- "definition": Provide a clear, technical definition of what this parameter controls (2-3 sentences)
-- "currentValueAnalysis": Analyze the specific provided value of {value}, discussing whether it's typical, high, or low, and what effects this specific value would have (2-3 sentences)
-- "alternativeValues": An array of EXACTLY TWO objects, each containing:
-  * "value": A specific alternative value (typically one lower and one higher than the current value)
-  * "direction": Either "lower" or "higher" to indicate if this is a lower or higher alternative
-  * "effect": A 1-2 sentence explanation of what effect this alternative value would have
+        Ensure all content is 100% original and not copied from any source.
+        Make sure your response is valid JSON.
+        """
+    else:
+        # General prompt for other parameters
+        prompt = f"""
+        Provide a comprehensive, educational explanation of the hyperparameter **{name}** (current value: {value}) in machine learning.
 
-- "bestPractices": Provide specific, practical advice for tuning this parameter (2-3 sentences)
-- "tradeOffs": Explain the key trade-offs involved when adjusting this parameter (2-3 sentences)
-- "impactVisualization": Describe how this parameter affects model behavior in terms a visualization might show (2-3 sentences)
+        Structure your response EXACTLY as a JSON object with these keys:
+        - "importance": Explain why this parameter matters for model performance (3-4 sentences)
+        - "definition": Provide a clear, technical definition without repeating the parameter name at the beginning (3-4 sentences with specifics about mathematical role)
+        - "currentValueAnalysis": Start with a direct analysis of the value {value} without repetition (3-4 sentences with practical insights)
+        - "alternativeValues": An array of 4-6 objects, each containing:
+          * "value": A specific alternative value (use concrete numbers or technique names)
+          * "direction": Either "lower" or "higher"
+          * "effect": A detailed 2-3 sentence explanation of effects
+          * "complexity": "basic", "intermediate", or "advanced"
 
-Make your response extremely educational and insightful for machine learning practitioners.
-Make sure your response is VALID JSON with properly escaped quotes. Do not nest JSON objects inside fields.
-"""
+        - "bestPractices": Specific, practical tuning advice (3-4 sentences)
+        - "tradeOffs": Key trade-offs when adjusting this parameter (3-4 sentences)
+        - "impactVisualization": How parameter affects model behavior visually (3-4 sentences)
+
+        Ensure each field has complete, natural sentences without repetition or awkward phrasing.
+        Make alternatives show a range from basic to advanced approaches.
+        Ensure VALID JSON with properly escaped quotes and no nested objects.
+        Do not include markdown code blocks.
+        """
+
     try:
         model = genai.GenerativeModel("models/gemini-1.5-flash")
         # Set more structured output with temperature 0.2 for more reliable JSON
@@ -90,135 +123,72 @@ Make sure your response is VALID JSON with properly escaped quotes. Do not nest 
         
         print(f"RAW EXPLANATION OUTPUT: {text_response[:200]}...")
         
-        # Clean up the response
-        # Remove any markdown code blocks
-        text_response = re.sub(r"^```(?:json)?\s*", "", text_response, flags=re.DOTALL)
-        text_response = re.sub(r"\s*```$", "", text_response, flags=re.DOTALL)
-        text_response = text_response.strip()
+        # Clean up the response - simpler approach
+        # Remove any markdown code blocks first
+        if text_response.startswith("```"):
+            # Find the end of the code block
+            end_marker = text_response.find("```", 3)
+            if end_marker > 0:
+                # Extract content between markers, excluding the markers themselves
+                text_response = text_response[text_response.find("{"):end_marker].strip()
         
-        # Fix common JSON issues
-        # Replace escaped quotes with temporary placeholder
-        text_response = text_response.replace('\\"', '##QUOTE##')
-        # Replace unescaped quotes inside strings with escaped quotes
-        text_response = re.sub(r'(?<="[^"]*)"(?=[^"]*")', '\\"', text_response)
-        # Restore properly escaped quotes
-        text_response = text_response.replace('##QUOTE##', '\\"')
-        
-        # Try to parse the fixed JSON
+        # Instead of trying to fix bad JSON, try again with a simpler prompt if parsing fails
         try:
             parsed = json.loads(text_response)
             
-            # Process alternative values to ensure they have the right structure
+            # Ensure all alternativeValues have a complexity field
             if "alternativeValues" in parsed and isinstance(parsed["alternativeValues"], list):
-                # Ensure each alternative value has the right structure
                 for i, alt in enumerate(parsed["alternativeValues"]):
-                    if not isinstance(alt, dict):
-                        # Convert string alternatives to properly structured objects
-                        if isinstance(alt, str):
-                            # Try to determine if this is higher or lower
-                            direction = "higher" if "higher" in alt.lower() else "lower"
-                            # Extract a value if possible
-                            value_match = re.search(r'(\d+\.?\d*)', alt)
-                            alt_value = value_match.group(1) if value_match else ("0.5" if direction == "higher" else "0.1")
-                            # Create a structured alternative
-                            parsed["alternativeValues"][i] = {
-                                "value": alt_value,
-                                "direction": direction,
-                                "effect": alt
-                            }
-            else:
-                # Create default alternative values if missing
-                parsed["alternativeValues"] = [
-                    {
-                        "value": "0.1" if str(value) != "0.1" else "0.05",
-                        "direction": "lower",
-                        "effect": "A lower value may provide better generalization but slower training."
-                    },
-                    {
-                        "value": "0.5" if str(value) != "0.5" else "0.8",
-                        "direction": "higher",
-                        "effect": "A higher value may lead to faster training but could reduce generalization."
-                    }
-                ]
-            
-            # Ensure all expected fields are present with meaningful content
-            required_fields = [
-                "importance", "definition", "currentValueAnalysis", 
-                "alternativeValues", "bestPractices", "tradeOffs", "impactVisualization"
-            ]
-            
-            for field in required_fields:
-                if field not in parsed or not parsed[field]:
-                    if field == "alternativeValues":
-                        # Already handled above
-                        pass
-                    elif field == "importance":
-                        parsed[field] = f"The {name} parameter is crucial for model performance as it directly impacts how the model learns from data."
-                    elif field == "definition":
-                        parsed[field] = f"The {name} parameter controls an aspect of model training or architecture."
-                    elif field == "currentValueAnalysis":
-                        parsed[field] = f"The value {value} is a common setting that provides a balance of performance and generalization."
-                    elif field == "bestPractices":
-                        parsed[field] = f"It's typically recommended to start with the default value and adjust based on validation performance."
-                    elif field == "tradeOffs":
-                        parsed[field] = f"Modifying this parameter often involves a tradeoff between training speed, model performance, and generalization ability."
-                    elif field == "impactVisualization":
-                        parsed[field] = f"Visualizing the effect of {name} would show how different values impact the model's learning curve and final performance."
+                    if isinstance(alt, dict) and "complexity" not in alt:
+                        # Add complexity based on index - earlier ones are more basic
+                        if i < len(parsed["alternativeValues"]) / 3:
+                            parsed["alternativeValues"][i]["complexity"] = "basic"
+                        elif i < 2 * len(parsed["alternativeValues"]) / 3:
+                            parsed["alternativeValues"][i]["complexity"] = "intermediate"
+                        else:
+                            parsed["alternativeValues"][i]["complexity"] = "advanced"
             
             return parsed
             
         except json.JSONDecodeError as e:
             print(f"Failed to parse JSON response: {e}")
+            print(f"Response content: {text_response}")
             
-            # Create a more comprehensive fallback response
-            alt_value1 = "0.1" if str(value) != "0.1" else "0.05"
-            alt_value2 = "0.5" if str(value) != "0.5" else "0.8"
+            # Try again with a simpler prompt instead of fallback
+            retry_prompt = f"""
+            Explain the machine learning parameter "{name}" with value "{value}" clearly.
             
-            return {
-                "importance": f"The {name} parameter is crucial for model performance as it directly impacts how the model learns from data.",
-                "definition": f"The {name} parameter controls an aspect of model training or architecture that affects the learning process.",
-                "currentValueAnalysis": f"The value {value} is a common setting that provides a balance of performance and generalization.",
-                "alternativeValues": [
-                    {
-                        "value": alt_value1,
-                        "direction": "lower",
-                        "effect": "A lower value may provide better generalization but slower training."
-                    },
-                    {
-                        "value": alt_value2,
-                        "direction": "higher",
-                        "effect": "A higher value may lead to faster training but could reduce generalization."
-                    }
-                ],
-                "bestPractices": "It's typically recommended to start with the default value and adjust based on validation performance.",
-                "tradeOffs": "Modifying this parameter often involves a tradeoff between training speed, model performance, and generalization ability.",
-                "impactVisualization": f"Visualizing the effect of {name} would show how different values impact the model's learning curve and final performance."
-            }
+            Return your explanation as a simple JSON object with these keys:
+            - importance: Why this parameter matters (2-3 sentences)
+            - definition: What this parameter is (2-3 sentences)
+            - currentValueAnalysis: Analysis of value {value} (2-3 sentences)
+            - alternativeValues: Array of 4 alternative values/approaches with their effects
+            - bestPractices: How to tune this parameter (2-3 sentences)
+            - tradeOffs: Trade-offs to consider (2-3 sentences)
+            - impactVisualization: How to visualize impact (2-3 sentences)
+            
+            Keep it simple and ensure valid JSON format.
+            """
+            
+            retry_response = model.generate_content(
+                retry_prompt,
+                generation_config={"temperature": 0.1}
+            )
+            retry_text = retry_response.text if hasattr(retry_response, "text") else str(retry_response)
+            
+            # Clean up the retry response
+            if retry_text.startswith("```"):
+                end_marker = retry_text.find("```", 3)
+                if end_marker > 0:
+                    retry_text = retry_text[retry_text.find("{"):end_marker].strip()
+                    
+            try:
+                return json.loads(retry_text)
+            except:
+                # If retry fails too, raise the original error
+                raise e
             
     except Exception as e:
         print(f"Error in explain_hyperparameter: {e}")
-        
-        # Create a comprehensive fallback response
-        alt_value1 = "0.1" if str(value) != "0.1" else "0.05"
-        alt_value2 = "0.5" if str(value) != "0.5" else "0.8"
-        
-        return {
-            "importance": f"The {name} parameter is crucial for model performance as it directly impacts how the model learns from data.",
-            "definition": f"The {name} parameter controls an aspect of model training or architecture that affects the learning process.",
-            "currentValueAnalysis": f"The value {value} is a common setting that provides a balance of performance and generalization.",
-            "alternativeValues": [
-                {
-                    "value": alt_value1,
-                    "direction": "lower",
-                    "effect": "A lower value may provide better generalization but slower training."
-                },
-                {
-                    "value": alt_value2,
-                    "direction": "higher",
-                    "effect": "A higher value may lead to faster training but could reduce generalization."
-                }
-            ],
-            "bestPractices": "It's typically recommended to start with the default value and adjust based on validation performance.",
-            "tradeOffs": "Modifying this parameter often involves a tradeoff between training speed, model performance, and generalization ability.",
-            "impactVisualization": f"Visualizing the effect of {name} would show how different values impact the model's learning curve and final performance."
-        }
+        # No fallback, just raise the error
+        raise
