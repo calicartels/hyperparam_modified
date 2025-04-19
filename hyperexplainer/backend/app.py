@@ -2,10 +2,9 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, make_response
 from setup_gc_credentials import setupGoogleCloudCredentials
-from flask_cors import CORS
 
 # Include the new function in imports
-from hyperparams import extract_hyperparameters, explain_hyperparameter, predict_parameter_impact
+from hyperparams import extract_hyperparameters, explain_hyperparameter, predict_parameter_impact, generate_parameter_correlations
 
 # Load env from top‑level .env
 dotenv_path = os.path.join(
@@ -15,12 +14,20 @@ dotenv_path = os.path.join(
 load_dotenv(dotenv_path)
 
 app = Flask(__name__)
-# Remove automatic CORS handling - we'll do it manually
-# CORS(app, resources={r"/*": {"origins": "*"}})
 PORT = int(os.getenv("BACKEND_PORT", 3000))
 
 # Google creds (optional)
 setupGoogleCloudCredentials()
+
+# Add a global OPTIONS route handler to catch all preflight requests
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    response = make_response()
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+    return response
 
 @app.after_request
 def after_request(response):
@@ -94,6 +101,24 @@ def explain():
         "tradeOffs": "Could not determine trade-offs.",
         "impactVisualization": "Visualization not available."
     }), 500  # Return 500 status to indicate error
+
+@app.route("/parameter_correlations", methods=["POST", "OPTIONS"])
+def parameter_correlations():
+    """
+    Returns a correlation matrix showing interactions between hyperparameters
+    """
+    if request.method == "OPTIONS":
+        return make_response()
+        
+    body = request.get_json(force=True)
+    parameters = body.get("parameters", {})
+    
+    print(f"\n===== RECEIVED PARAMETER_CORRELATIONS REQUEST =====")
+    print(f"Parameters: {parameters}")
+    
+    # Call a new function in hyperparams.py
+    correlation_data = generate_parameter_correlations(parameters)
+    return jsonify(correlation_data)
 
 @app.route("/predict_performance", methods=["POST", "OPTIONS"])
 def predict_performance():

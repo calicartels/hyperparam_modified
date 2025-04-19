@@ -2,7 +2,10 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./detail.css";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
+  ResponsiveContainer, ReferenceLine, BarChart, Bar
+} from 'recharts';
 
 // New interfaces for performance data
 interface PerformanceDataPoint {
@@ -48,6 +51,31 @@ interface Explanation {
   impactVisualization: string;
 }
 
+// Scenario interface for What-If builder
+interface ScenarioConfig {
+  id: string;
+  name: string;
+  paramName: string;
+  paramValue: string;
+  performanceData: PerformanceData | null;
+  color: string;
+}
+
+// Interfaces for correlation matrix
+interface CorrelationExplanation {
+  param1: string;
+  param2: string;
+  effect: string;
+  strength: "high" | "medium" | "low";
+  direction: "positive" | "negative";
+}
+
+interface CorrelationData {
+  correlation_matrix: number[][];
+  parameter_names: string[];
+  explanations: CorrelationExplanation[];
+}
+
 // Pick up the backend URL from env or fall back to localhost
 const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 console.log("[HyperExplainer][Detail] Using BACKEND =", BACKEND);
@@ -74,10 +102,20 @@ function DetailApp() {
   const [impact, setImpact] = useState("Medium");
   const [complexityFilter, setComplexityFilter] = useState<string | null>(null);
   
-  // New state variables for Parameter Playground
+  // Parameter Playground state variables
   const [sliderValue, setSliderValue] = useState(value);
   const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
+  
+  // What-If Scenario Builder state variables
+  const [scenarios, setScenarios] = useState<ScenarioConfig[]>([]);
+  const [showScenarioBuilder, setShowScenarioBuilder] = useState<boolean>(false);
+  const [scenarioName, setScenarioName] = useState<string>('');
+  const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe'];
+  
+  // Correlation Matrix state variables
+  const [correlationData, setCorrelationData] = useState<CorrelationData | null>(null);
+  const [isLoadingCorrelations, setIsLoadingCorrelations] = useState(false);
 
   useEffect(() => {
     if (name) {
@@ -141,7 +179,7 @@ function DetailApp() {
     }
   }
 
-  // New function to fetch performance data
+  // Function to fetch performance data
   async function fetchPerformanceData(paramValue: string) {
     console.log("[HyperExplainer][Detail] Fetching performance data", { name, value: paramValue });
     try {
@@ -170,6 +208,72 @@ function DetailApp() {
     }
   }
 
+  // Function to fetch correlation data
+  const fetchCorrelationData = async () => {
+    console.log("[HyperExplainer][Detail] Fetching correlation data");
+    try {
+      setIsLoadingCorrelations(true);
+      
+      // Get detected parameters from the popup storage or use a default set
+      let allParams: Record<string, string> = {};
+      
+      try {
+        // Try to get parameters from chrome storage
+        chrome.storage.local.get("hyperparams", (result) => {
+          if (result.hyperparams) {
+            allParams = result.hyperparams;
+          } else {
+            // Fallback to some default parameters
+            allParams = {
+              [name]: value,
+              "learning_rate": "0.001",
+              "batch_size": "32",
+              "epochs": "10",
+              "dropout_rate": "0.2"
+            };
+          }
+          
+          // Continue with the fetch once we have parameters
+          fetchCorrelationDataWithParams(allParams);
+        });
+      } catch (e) {
+        // If storage access fails, use fallback parameters
+        allParams = {
+          [name]: value,
+          "learning_rate": "0.001",
+          "batch_size": "32",
+          "epochs": "10",
+          "dropout_rate": "0.2"
+        };
+        fetchCorrelationDataWithParams(allParams);
+      }
+      
+    } catch (e: any) {
+      console.error("[HyperExplainer][Detail] fetch correlation data failed:", e);
+    }
+  };
+
+  const fetchCorrelationDataWithParams = async (params: Record<string, string>) => {
+    try {
+      const resp = await fetch(`${BACKEND}/parameter_correlations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parameters: params }),
+      });
+      
+      if (!resp.ok) {
+        throw new Error(`Server responded ${resp.status}: ${resp.statusText}`);
+      }
+      
+      const data = await resp.json() as CorrelationData;
+      setCorrelationData(data);
+    } catch (e: any) {
+      console.error("[HyperExplainer][Detail] fetch correlation data failed:", e);
+    } finally {
+      setIsLoadingCorrelations(false);
+    }
+  };
+
   // Handle slider changes
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = performanceData?.parameter_type === 'continuous' 
@@ -181,6 +285,64 @@ function DetailApp() {
   // Handle slider release - fetch new data
   const handleSliderRelease = () => {
     fetchPerformanceData(sliderValue);
+  };
+
+  // Save current configuration as a scenario
+  const saveScenario = () => {
+    if (!performanceData) return;
+    
+    const newScenario: ScenarioConfig = {
+      id: `scenario-${Date.now()}`,
+      name: scenarioName || `${name}=${sliderValue}`,
+      paramName: name,
+      paramValue: sliderValue,
+      performanceData: performanceData,
+      color: COLORS[scenarios.length % COLORS.length]
+    };
+    
+    setScenarios([...scenarios, newScenario]);
+    setScenarioName('');
+    setShowScenarioBuilder(true);
+  };
+
+  // Delete a scenario
+  const deleteScenario = (id: string) => {
+    setScenarios(scenarios.filter(s => s.id !== id));
+  };
+
+  // Format data for comparison chart
+  const prepareComparisonData = () => {
+    if (scenarios.length === 0) return [];
+    
+    // Create data points for each metric we want to compare
+    return [
+      {
+        name: 'Training Accuracy',
+        ...scenarios.reduce((acc, scenario) => {
+          if (scenario.performanceData?.series && scenario.performanceData.series.length > 0) {
+            // Find the data point closest to the current value for training accuracy
+            const trainingData = scenario.performanceData.series[0].data;
+            const currentIndex = trainingData.findIndex(d => d.x === scenario.paramValue) || 
+                               Math.floor(trainingData.length / 2);
+            acc[scenario.name] = trainingData[currentIndex]?.y || 0;
+          }
+          return acc;
+        }, {} as Record<string, number>)
+      },
+      {
+        name: 'Validation Accuracy',
+        ...scenarios.reduce((acc, scenario) => {
+          if (scenario.performanceData?.series && scenario.performanceData.series.length > 1) {
+            // Find the data point closest to the current value for validation accuracy
+            const validationData = scenario.performanceData.series[1].data;
+            const currentIndex = validationData.findIndex(d => d.x === scenario.paramValue) || 
+                               Math.floor(validationData.length / 2);
+            acc[scenario.name] = validationData[currentIndex]?.y || 0;
+          }
+          return acc;
+        }, {} as Record<string, number>)
+      }
+    ];
   };
 
   // Prepare data for chart
@@ -303,6 +465,29 @@ function DetailApp() {
       // For alternatives without complexity, include them only in 'all' view
       return false;
     });
+  };
+
+  // Helper function to render correlation matrix cells
+  const renderCorrelationCell = (value: number, i: number, j: number, names: string[]) => {
+    const colorValue = value === 1 ? '#f0f0f0' : 
+                      value > 0 ? `rgba(0, 123, 255, ${Math.min(Math.abs(value), 1)})` : 
+                      `rgba(255, 0, 0, ${Math.min(Math.abs(value), 1)})`;
+    
+    const textColor = Math.abs(value) > 0.5 ? 'white' : 'black';
+    
+    return (
+      <div 
+        key={`${i}-${j}`} 
+        className="matrix-cell" 
+        style={{ 
+          backgroundColor: colorValue,
+          color: textColor
+        }}
+        title={`${names[i]} × ${names[j]}: ${value.toFixed(2)}`}
+      >
+        {value.toFixed(2)}
+      </div>
+    );
   };
 
   return (
@@ -483,6 +668,17 @@ model.compile(loss='categorical_crossentropy',
                   Parameter Visualization
                 </button>
                 <button 
+                  className={`tab-button ${activeTab === 'correlations' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('correlations');
+                    if (!correlationData) {
+                      fetchCorrelationData();
+                    }
+                  }}
+                >
+                  Parameter Correlations
+                </button>
+                <button 
                   className={`tab-button ${activeTab === 'neural' ? 'active' : ''}`}
                   onClick={() => setActiveTab('neural')}
                 >
@@ -554,7 +750,7 @@ model.compile(loss='categorical_crossentropy',
                             tickFormatter={(value) => typeof value === 'number' ? value.toFixed(0) : value}
                             ticks={performanceData?.parameter_type === 'continuous' ? 
                                 [5, 10, 15, 20, 25] : undefined}
-                            />
+                          />
                           <YAxis 
                             label={{ value: performanceData.y_axis_label, angle: -90, position: 'insideLeft' }}
                             domain={[0, 1]}
@@ -603,8 +799,151 @@ model.compile(loss='categorical_crossentropy',
                     </div>
                   )}
                   
+                  {/* What-If Scenario Builder */}
+                  <div className="section-header-with-controls">
+                    <h3>What-If Scenario Builder</h3>
+                    <button 
+                      className={`toggle-button ${showScenarioBuilder ? 'active' : ''}`}
+                      onClick={() => setShowScenarioBuilder(!showScenarioBuilder)}
+                    >
+                      {showScenarioBuilder ? 'Hide' : 'Show'} Scenarios
+                    </button>
+                  </div>
+                  
+                  {performanceData && (
+                    <div className="scenario-controls">
+                      <div className="save-scenario-form">
+                        <input
+                          type="text"
+                          placeholder={`${name}=${sliderValue}`}
+                          value={scenarioName}
+                          onChange={(e) => setScenarioName(e.target.value)}
+                          className="scenario-name-input"
+                        />
+                        <button className="save-scenario-button" onClick={saveScenario}>
+                          Save Current Configuration
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {showScenarioBuilder && (
+                    <>
+                      {scenarios.length === 0 ? (
+                        <p className="no-scenarios">No scenarios saved yet. Adjust parameters and save configurations to compare them.</p>
+                      ) : (
+                        <>
+                          <div className="scenarios-list">
+                            {scenarios.map(scenario => (
+                              <div key={scenario.id} className="scenario-card" style={{borderLeftColor: scenario.color}}>
+                                <div className="scenario-header">
+                                  <span className="scenario-name">{scenario.name}</span>
+                                  <button 
+                                    className="delete-scenario-button"
+                                    onClick={() => deleteScenario(scenario.id)}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                                <div className="scenario-details">
+                                  <span className="scenario-param">{scenario.paramName}: {scenario.paramValue}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          <div className="comparison-chart">
+                            <h4>Performance Comparison</h4>
+                            <ResponsiveContainer width="100%" height={300}>
+                              <BarChart
+                                data={prepareComparisonData()}
+                                margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis domain={[0, 1]} />
+                                <Tooltip />
+                                <Legend />
+                                {scenarios.map(scenario => (
+                                  <Bar 
+                                    key={scenario.id}
+                                    dataKey={scenario.name} 
+                                    fill={scenario.color}
+                                  />
+                                ))}
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                  
                   <h3>Impact Visualization</h3>
                   <p>{expl.impactVisualization}</p>
+                </div>
+              )}
+
+              {activeTab === 'correlations' && (
+                <div className="section">
+                  <h3>Hyperparameter Correlation Matrix</h3>
+                  <p className="matrix-description">
+                    This heatmap shows how different hyperparameters interact with each other. 
+                    Blue cells indicate positive correlations (parameters that work well together),
+                    while red cells indicate negative correlations (parameters that require balancing).
+                  </p>
+                  
+                  {isLoadingCorrelations && <div className="loading">Loading correlation data...</div>}
+                  
+                  {correlationData && !isLoadingCorrelations && (
+                    <>
+                      <div className="correlation-matrix">
+                        <div className="matrix-container">
+                          <div className="matrix-header">
+                            <div className="matrix-corner"></div>
+                            {correlationData.parameter_names.map((name, i) => (
+                              <div key={i} className="matrix-column-header">{name}</div>
+                            ))}
+                          </div>
+                          
+                          {correlationData.correlation_matrix.map((row, i) => (
+                            <div key={i} className="matrix-row">
+                              <div className="matrix-row-header">{correlationData.parameter_names[i]}</div>
+                              {row.map((value, j) => renderCorrelationCell(value, i, j, correlationData.parameter_names))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="correlation-explanations">
+                        <h4>Key Interactions</h4>
+                        {correlationData.explanations.length === 0 ? (
+                          <p>No significant parameter interactions detected.</p>
+                        ) : (
+                          <div className="explanation-cards">
+                            {correlationData.explanations.map((explanation, index) => (
+                              <div 
+                                key={index} 
+                                className={`explanation-card ${explanation.direction} ${explanation.strength}`}
+                              >
+                                <div className="explanation-header">
+                                  <span className="param1">{explanation.param1}</span>
+                                  <span className="direction-arrow">
+                                    {explanation.direction === 'positive' ? '↗' : '↘'}
+                                  </span>
+                                  <span className="param2">{explanation.param2}</span>
+                                </div>
+                                <div className="explanation-strength">
+                                  {explanation.strength} {explanation.direction} correlation
+                                </div>
+                                <p className="explanation-effect">{explanation.effect}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

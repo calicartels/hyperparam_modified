@@ -4,6 +4,7 @@ import re
 import math
 import google.generativeai as genai
 from dotenv import load_dotenv
+import random
 
 # Load environment variables from the top‐level .env
 dotenv_path = os.path.join(
@@ -368,3 +369,141 @@ def generate_default_performance_data(name: str, value: str) -> dict:
                 {"value": options[(current_index + 1) % len(options)], "reason": "Alternative with good performance"}
             ]
         }
+    
+
+def generate_parameter_correlations(parameters: dict) -> dict:
+    """
+    Generates correlation data for visualization in a heatmap
+    """
+    prompt = f"""
+    You are an expert in machine learning. Based on these parameters:
+    {json.dumps(parameters)}
+    
+    Generate a correlation matrix showing how these parameters interact with each other.
+    
+    Return ONLY a valid JSON object with this exact structure:
+    {{
+        "correlation_matrix": [
+            [1.0, value, value, ...],
+            [value, 1.0, value, ...],
+            ...
+        ],
+        "parameter_names": ["param1", "param2", ...],
+        "explanations": [
+            {{
+                "param1": "param2",
+                "effect": "explanation of how param1 and param2 interact",
+                "strength": "high/medium/low",
+                "direction": "positive/negative"
+            }},
+            ...
+        ]
+    }}
+    
+    The correlation values should be between -1.0 (strong negative correlation) and 1.0 (strong positive correlation).
+    Include explanations for correlations with absolute value > 0.3.
+    """
+    
+    try:
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
+        response = model.generate_content(
+            prompt,
+            generation_config={"temperature": 0.2}
+        )
+        
+        text_response = response.text if hasattr(response, "text") else str(response)
+        
+        print(f"RAW CORRELATION MATRIX OUTPUT: {text_response[:200]}...")
+        
+        if text_response.startswith("```"):
+            end_marker = text_response.find("```", 3)
+            if end_marker > 0:
+                text_response = text_response[text_response.find("{"):end_marker].strip()
+        
+        try:
+            return json.loads(text_response)
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse JSON response: {e}")
+            return generate_fallback_correlation_data(parameters)
+            
+    except Exception as e:
+        print(f"Error in generate_parameter_correlations: {e}")
+        return generate_fallback_correlation_data(parameters)
+
+def generate_fallback_correlation_data(parameters: dict) -> dict:
+    """Generate fallback correlation data when API call fails"""
+    # Get parameter names
+    param_names = list(parameters.keys())
+    
+    # Create a correlation matrix with some realistic values
+    n = len(param_names)
+    matrix = [[0.0 for _ in range(n)] for _ in range(n)]
+    
+    # Set diagonal to 1.0 (self-correlation)
+    for i in range(n):
+        matrix[i][i] = 1.0
+    
+    # Set some common correlations
+    explanations = []
+    
+    # Common correlations by parameter name
+    common_pairs = {
+        ("learning_rate", "batch_size"): -0.4,
+        ("learning_rate", "epochs"): 0.3,
+        ("learning_rate", "dropout_rate"): 0.5,
+        ("batch_size", "epochs"): 0.2,
+        ("batch_size", "dropout_rate"): -0.3,
+        ("epochs", "dropout_rate"): 0.4,
+        ("optimizer", "learning_rate"): 0.6,
+        ("loss", "metrics"): 0.7,
+        ("metrics", "epochs"): 0.2
+    }
+    
+    for i in range(n):
+        for j in range(i+1, n):
+            # Look for known correlations
+            corr = 0.0
+            for pair, value in common_pairs.items():
+                if (param_names[i].lower() in pair[0] and param_names[j].lower() in pair[1]) or \
+                   (param_names[i].lower() in pair[1] and param_names[j].lower() in pair[0]):
+                    corr = value
+                    break
+            
+            if corr == 0.0:
+                # Generate small random correlation if no known correlation
+                corr = round(random.uniform(-0.2, 0.2), 2)
+            
+            # Make matrix symmetric
+            matrix[i][j] = corr
+            matrix[j][i] = corr
+            
+            # Add explanation for significant correlations
+            if abs(corr) > 0.3:
+                direction = "positive" if corr > 0 else "negative"
+                strength = "high" if abs(corr) > 0.7 else "medium" if abs(corr) > 0.5 else "low"
+                
+                # Generate explanations based on correlation type
+                if param_names[i].lower() == "learning_rate" and param_names[j].lower() == "batch_size":
+                    effect = "Higher learning rates often require smaller batch sizes to prevent divergence, while lower learning rates work better with larger batches."
+                elif (param_names[i].lower() == "learning_rate" and param_names[j].lower() == "epochs") or \
+                     (param_names[i].lower() == "epochs" and param_names[j].lower() == "learning_rate"):
+                    effect = "Higher learning rates typically require fewer epochs to converge, while lower learning rates need more epochs to reach optimal performance."
+                elif (param_names[i].lower() == "dropout_rate" and param_names[j].lower() == "epochs") or \
+                     (param_names[i].lower() == "epochs" and param_names[j].lower() == "dropout_rate"):
+                    effect = "Models with higher dropout rates often need more epochs to converge as dropout slows down the learning process."
+                else:
+                    effect = f"Changes in {param_names[i]} often require adjustments to {param_names[j]} for optimal performance."
+                
+                explanations.append({
+                    "param1": param_names[i],
+                    "param2": param_names[j],
+                    "effect": effect,
+                    "strength": strength,
+                    "direction": direction
+                })
+    
+    return {
+        "correlation_matrix": matrix,
+        "parameter_names": param_names,
+        "explanations": explanations
+    }
