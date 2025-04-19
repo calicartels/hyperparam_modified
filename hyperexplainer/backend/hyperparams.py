@@ -26,16 +26,32 @@ def extract_hyperparameters(code: str) -> dict:
     Logs raw output and strips Markdown fences if present.
     """
     prompt = f"""
-You are a helpful assistant. Analyze the following machine learning code and identify all hyperparameters.
+You are an expert ML engineer. Analyze the following machine learning code and identify ALL hyperparameters, including implicit ones.
 Return ONLY a valid JSON object where each key is a hyperparameter name and each value is its corresponding value.
-Do NOT include any other text outside the JSON.
+
+Include these specific types of hyperparameters:
+1. Explicit hyperparameters (like optimizer='adam', epochs=5)
+2. Network architecture parameters:
+   - Layer sizes (e.g., Dense(128) → "hidden_layer_size": 128)
+   - Output dimensions (e.g., Dense(10) → "output_layer_size": 10)
+   - Input shapes (e.g., input_shape=(28, 28) → "input_shape": "28,28")
+   - Activation functions
+   - Regularization settings (dropout rates)
+3. Data preprocessing parameters:
+   - Normalization factors (e.g., /255.0 → "normalization_factor": 255.0)
+   - Scaling values
+
+Use descriptive, specific names for implicit parameters to clearly indicate what they represent.
 
 Code:
 {code}
 """
     try:
         model = genai.GenerativeModel("models/gemini-1.5-flash")
-        response = model.generate_content(prompt)
+        response = model.generate_content(
+            prompt,
+            generation_config={"temperature": 0.1}  # Lower temperature for more consistent extraction
+        )
 
         # DEBUG: inspect raw model output
         raw = response.text if hasattr(response, "text") else str(response)

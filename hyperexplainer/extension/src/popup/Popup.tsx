@@ -12,7 +12,10 @@ type Param = {
   value: string; 
   impact?: "High" | "Medium" | "Low";
   framework?: "TensorFlow" | "PyTorch" | "Common"; 
+  category?: string;
 };
+
+type CategoryMap = Record<string, string[]>;
 
 function App() {
   const [code, setCode] = useState<string>("");
@@ -20,6 +23,114 @@ function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [groupedParams, setGroupedParams] = useState<Record<string, Param[]>>({});
+  
+  const [paramCategories] = useState<CategoryModel>({
+    categories: {
+      architecture: [
+        'units', 'layer', 'shape', 'hidden', 'filters', 'kernel', 'pool', 
+        'dense', 'dropout', 'conv', 'lstm', 'hidden_layer_size', 'output_layer_size',
+        'output_units', 'input_shape'
+      ],
+      preprocessing: [
+        'normalization', 'scaling', 'factor', 'augmentation', 'resize',
+        'normalization_factor', 'standardization'
+      ],
+      activation: ['activation', 'relu', 'sigmoid', 'tanh', 'softmax', 'leaky', 'swish', 'mish', 'gelu'],
+      optimization: ['optimizer', 'learning_rate', 'momentum', 'decay', 'beta', 'adam', 'sgd', 'rmsprop'],
+      training: ['epochs', 'batch', 'steps', 'patience', 'callbacks', 'monitor'],
+      evaluation: ['loss', 'metric', 'accuracy', 'precision', 'recall', 'f1', 'auc', 'mae'],
+      regularization: ['dropout', 'l1', 'l2', 'regulariz', 'penalty']
+    },
+    displayNames: {
+      architecture: "NETWORK ARCHITECTURE",
+      preprocessing: "DATA PREPROCESSING",
+      activation: "ACTIVATION FUNCTIONS",
+      optimization: "OPTIMIZATION",
+      training: "TRAINING PARAMETERS",
+      evaluation: "EVALUATION METRICS",
+      regularization: "REGULARIZATION",
+      other: "OTHER PARAMETERS"
+    },
+    impacts: {
+      high: ['learning_rate', 'optimizer', 'loss', 'epochs', 'batch_size'],
+      medium: ['dropout', 'activation', 'layers', 'units', 'hidden_layer_size'],
+      low: ['momentum', 'beta', 'epsilon', 'seed', 'normalization_factor']
+    }
+  });
+
+  // Function to categorize parameters based on name
+  const categorizeParameter = (name: string) => {
+    const lowerName = name.toLowerCase();
+    
+    for (const [category, keywords] of Object.entries(paramCategories.categories)) {
+      if (keywords.some(keyword => lowerName.includes(keyword))) {
+        return category;
+      }
+    }
+    return "other";
+  };
+
+  // Function to determine impact based on parameter name
+  const determineImpact = (name: string): "High" | "Medium" | "Low" => {
+    const lowerName = name.toLowerCase();
+    
+    if (paramCategories.impacts.high.some(keyword => lowerName.includes(keyword))) {
+      return "High";
+    } else if (paramCategories.impacts.medium.some(keyword => lowerName.includes(keyword))) {
+      return "Medium";
+    }
+    
+    return "Low";
+  };
+
+  // Function to determine framework based on parameter name
+  const determineFramework = (name: string): "TensorFlow" | "PyTorch" | "Common" => {
+    const lowerName = name.toLowerCase();
+    
+    if (lowerName.includes("torch") || lowerName.includes("nn.")) {
+      return "PyTorch";
+    } else if (lowerName.includes("tf.") || lowerName.includes("keras")) {
+      return "TensorFlow";
+    }
+    
+    return "Common";
+  };
+
+  // Group parameters by category
+  useEffect(() => {
+    if (params.length > 0) {
+      const grouped: Record<string, Param[]> = {};
+      
+      params.forEach(param => {
+        const category = param.category || 'other';
+        if (!grouped[category]) {
+          grouped[category] = [];
+        }
+        grouped[category].push(param);
+      });
+      
+      // Sort categories to ensure consistent order
+      const sortedGroups: Record<string, Param[]> = {};
+      const orderedCategories = [
+        'architecture',
+        'activation',
+        'optimization',
+        'training',
+        'evaluation',
+        'regularization',
+        'other'
+      ];
+      
+      orderedCategories.forEach(cat => {
+        if (grouped[cat]?.length > 0) {
+          sortedGroups[cat] = grouped[cat];
+        }
+      });
+      
+      setGroupedParams(sortedGroups);
+    }
+  }, [params]);
 
   useEffect(() => {
     console.log("[HyperExplainer][Popup] Popup mounted, reading storage");
@@ -53,32 +164,31 @@ function App() {
             const data = (await resp.json()) as Record<string, string>;
             console.log("[HyperExplainer][Popup] Extract response JSON:", data);
 
-            // Enhance params with mock impact and framework data
+            // Enhanced param mapping with dynamic categorization
             const mapped = Object.entries(data).map(([name, value]) => {
               // Handle null values
               const safeValue = value === null ? "null" : String(value);
+              const category = categorizeParameter(name);
+              const impact = determineImpact(name);
+              const framework = determineFramework(name);
               
-              // Default values
-              let impact: "High" | "Medium" | "Low" = "Medium";
-              let framework: "TensorFlow" | "PyTorch" | "Common" = "Common";
-              
-              // Assign framework and impact
-              if (name.includes("learning_rate")) {
-                impact = "High";
-                framework = "TensorFlow";
-              } else if (name.includes("dropout")) {
-                impact = "Low";
-                framework = "Common";
-              } else if (name.includes("optimizer")) {
-                impact = "Medium";
-                framework = "TensorFlow";
-              } else if (name.includes("batch")) {
-                impact = "Medium";
-                framework = "Common";
-              }
-              
-              return { name, value: safeValue, impact, framework };
+              return { 
+                name, 
+                value: safeValue, 
+                impact, 
+                framework,
+                category 
+              };
             });
+            
+            // Store parameters to chrome storage for other components
+            try {
+              chrome.storage.local.set({ 
+                hyperparams: Object.fromEntries(mapped.map(p => [p.name, p.value]))
+              });
+            } catch (err) {
+              console.warn("Could not store params to chrome storage", err);
+            }
             
             setParams(mapped);
           } catch (e: any) {
@@ -118,10 +228,14 @@ function App() {
     return p.framework === activeTab;
   });
 
-  // Group params by framework or category
-  const tfParams = params.filter(p => p.framework === "TensorFlow");
-  const commonParams = params.filter(p => p.framework === "Common");
+  // Group params by framework
+  const paramsByFramework = {
+    "TensorFlow": params.filter(p => p.framework === "TensorFlow"),
+    "PyTorch": params.filter(p => p.framework === "PyTorch"),
+    "Common": params.filter(p => p.framework === "Common")
+  };
 
+  // Helper functions for styling
   const getImpactClass = (impact?: string) => {
     if (!impact) return "";
     return impact === "High" ? "high-impact" : impact === "Medium" ? "medium-impact" : "low-impact";
@@ -131,6 +245,26 @@ function App() {
     if (!impact) return "";
     return impact === "High" ? "impact-high" : impact === "Medium" ? "impact-medium" : "impact-low";
   };
+
+  // Render param card
+  const renderParamCard = (param: Param) => (
+    <div key={param.name} className={`card ${getImpactClass(param.impact)}`} onClick={() => openDetail(param)}>
+      <span className="card-name">{param.name}</span>
+      <div className="card-details">
+        <div className="card-value-section">
+          <span className="card-label">Value:</span>
+          <span className="card-value">{param.value}</span>
+        </div>
+        <div className="card-impact-section">
+          <span className="card-label">Impact:</span>
+          <span className={`card-impact ${getImpactColorClass(param.impact)}`}>
+            {param.impact || "Medium"}
+          </span>
+        </div>
+      </div>
+      <span className="card-arrow">→</span>
+    </div>
+  );
 
   return (
     <div className="popup-container">
@@ -152,18 +286,17 @@ function App() {
           >
             All
           </div>
-          <div 
-            className={`tab ${activeTab === "TensorFlow" ? "active" : ""}`}
-            onClick={() => setActiveTab("TensorFlow")}
-          >
-            TensorFlow
-          </div>
-          <div 
-            className={`tab ${activeTab === "PyTorch" ? "active" : ""}`}
-            onClick={() => setActiveTab("PyTorch")}
-          >
-            PyTorch
-          </div>
+          {Object.entries(paramsByFramework).map(([framework, params]) => 
+            params.length > 0 ? (
+              <div 
+                key={framework}
+                className={`tab ${activeTab === framework ? "active" : ""}`}
+                onClick={() => setActiveTab(framework)}
+              >
+                {framework}
+              </div>
+            ) : null
+          )}
         </div>
       )}
 
@@ -179,72 +312,23 @@ function App() {
         </p>
       )}
 
-      {!loading && !error && tfParams.length > 0 && activeTab === "all" && (
-        <>
-          <div className="section-header">TENSORFLOW</div>
-          <div className="cards">
-            {tfParams.map((p) => (
-              <div key={p.name} className={`card ${getImpactClass(p.impact)}`} onClick={() => openDetail(p)}>
-                <span className="card-name">{p.name}</span>
-                <div className="card-details">
-                  <div className="card-value-section">
-                    <span className="card-label">Value:</span>
-                    <span className="card-value">{p.value || "null"}</span>
-                  </div>
-                  <div className="card-impact-section">
-                    <span className="card-label">Impact:</span>
-                    <span className={`card-impact ${getImpactColorClass(p.impact)}`}>{p.impact || "Medium"}</span>
-                  </div>
-                </div>
-                <span className="card-arrow">→</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {!loading && !error && commonParams.length > 0 && activeTab === "all" && (
-        <>
-          <div className="section-header">COMMON PARAMETERS</div>
-          <div className="cards">
-            {commonParams.map((p) => (
-              <div key={p.name} className={`card ${getImpactClass(p.impact)}`} onClick={() => openDetail(p)}>
-                <span className="card-name">{p.name}</span>
-                <div className="card-details">
-                  <div className="card-value-section">
-                    <span className="card-label">Value:</span>
-                    <span className="card-value">{p.value || "null"}</span>
-                  </div>
-                  <div className="card-impact-section">
-                    <span className="card-label">Impact:</span>
-                    <span className={`card-impact ${getImpactColorClass(p.impact)}`}>{p.impact || "Medium"}</span>
-                  </div>
-                </div>
-                <span className="card-arrow">→</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {!loading && !error && filteredParams.length > 0 && activeTab !== "all" && (
-        <div className="cards">
-          {filteredParams.map((p) => (
-            <div key={p.name} className={`card ${getImpactClass(p.impact)}`} onClick={() => openDetail(p)}>
-              <span className="card-name">{p.name}</span>
-              <div className="card-details">
-                <div className="card-value-section">
-                  <span className="card-label">Value:</span>
-                  <span className="card-value">{p.value || "null"}</span>
-                </div>
-                <div className="card-impact-section">
-                  <span className="card-label">Impact:</span>
-                  <span className={`card-impact ${getImpactColorClass(p.impact)}`}>{p.impact || "Medium"}</span>
-                </div>
-              </div>
-              <span className="card-arrow">→</span>
+      {!loading && !error && params.length > 0 && activeTab === "all" && (
+        // Render grouped parameters by category
+        Object.entries(groupedParams).map(([category, params]) => (
+          <div key={category} className="param-category">
+            <div className="section-header">
+              {(paramCategories.displayNames as any)[category] || category.toUpperCase()}
             </div>
-          ))}
+            <div className="cards">
+              {params.map(param => renderParamCard(param))}
+            </div>
+          </div>
+        ))
+      )}
+
+      {!loading && !error && activeTab !== "all" && (
+        <div className="cards">
+          {filteredParams.map(param => renderParamCard(param))}
         </div>
       )}
 
@@ -265,6 +349,13 @@ function App() {
       )}
     </div>
   );
+}
+
+// Type for parameter categorization model
+interface CategoryModel {
+  categories: Record<string, string[]>;
+  displayNames: Record<string, string>;
+  impacts: Record<string, string[]>;
 }
 
 const container = document.getElementById("root")!;
