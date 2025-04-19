@@ -1,10 +1,11 @@
 import os
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from setup_gc_credentials import setupGoogleCloudCredentials
 from flask_cors import CORS
 
-from hyperparams import extract_hyperparameters, explain_hyperparameter
+# Include the new function in imports
+from hyperparams import extract_hyperparameters, explain_hyperparameter, predict_parameter_impact
 
 # Load env from top‑level .env
 dotenv_path = os.path.join(
@@ -14,7 +15,8 @@ dotenv_path = os.path.join(
 load_dotenv(dotenv_path)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+# Remove automatic CORS handling - we'll do it manually
+# CORS(app, resources={r"/*": {"origins": "*"}})
 PORT = int(os.getenv("BACKEND_PORT", 3000))
 
 # Google creds (optional)
@@ -23,20 +25,30 @@ setupGoogleCloudCredentials()
 @app.after_request
 def after_request(response):
     print(f"Request: {request.method} {request.path} -> Response: {response.status_code}")
+    # Add CORS headers manually - don't use CORS extension
+    response.headers.set('Access-Control-Allow-Origin', '*')  # Use 'set' not 'add'
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     print(f"CORS Headers: {response.headers.get('Access-Control-Allow-Origin', 'None')}")
     return response
 
-@app.route("/extract", methods=["POST"])
+@app.route("/extract", methods=["POST", "OPTIONS"])
 def extract():
     """
     Step 1: returns JSON map hyperparam_name→value
     """
+    if request.method == "OPTIONS":
+        return make_response()
+        
     code = request.get_json(force=True).get("code", "")
     params = extract_hyperparameters(code)
     return jsonify(params)
 
-@app.route("/explain", methods=["POST"])
+@app.route("/explain", methods=["POST", "OPTIONS"])
 def explain():
+    if request.method == "OPTIONS":
+        return make_response()
+        
     body = request.get_json(force=True)
     name = body.get("name", "")
     value = body.get("value", "")
@@ -82,6 +94,27 @@ def explain():
         "tradeOffs": "Could not determine trade-offs.",
         "impactVisualization": "Visualization not available."
     }), 500  # Return 500 status to indicate error
+
+@app.route("/predict_performance", methods=["POST", "OPTIONS"])
+def predict_performance():
+    """
+    Returns predicted performance metrics for given parameter values
+    """
+    # Handle OPTIONS request explicitly
+    if request.method == "OPTIONS":
+        return make_response()
+        
+    body = request.get_json(force=True)
+    param_name = body.get("name", "")
+    param_value = body.get("value", "")
+    additional_params = body.get("additional_params", {})
+    
+    print(f"\n===== RECEIVED PREDICT_PERFORMANCE REQUEST =====")
+    print(f"Name: {param_name}, Value: {param_value}")
+    
+    # Call the function
+    performance_data = predict_parameter_impact(param_name, param_value, additional_params)
+    return jsonify(performance_data)
 
 if __name__ == "__main__":
     try:
