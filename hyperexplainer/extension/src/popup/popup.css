@@ -265,3 +265,58 @@
   .param-category {
     margin-bottom: 20px;
   }
+
+
+  /* Extraction method selector */
+.extraction-method {
+    background-color: #f0f9ff;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+  }
+  
+  .extraction-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0369a1;
+    margin-bottom: 8px;
+  }
+  
+  .method-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .method-option {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  
+  .method-option input[type="radio"] {
+    margin-right: 8px;
+  }
+  
+  .method-option span {
+    font-size: 13px;
+    color: #374151;
+  }
+  
+  /* Badge to show which method was used */
+  .info-row .method-badge {
+    background-color: #4f46e5;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    margin-left: 4px;
+  }
+  
+  .info-row .method-badge.naive {
+    background-color: #ef4444;
+  }
+  
+  .info-row .method-badge.classical {
+    background-color: #0ea5e9;
+  }

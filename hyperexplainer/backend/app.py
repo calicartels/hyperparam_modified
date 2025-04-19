@@ -47,8 +47,14 @@ def extract():
     if request.method == "OPTIONS":
         return make_response()
         
-    code = request.get_json(force=True).get("code", "")
-    params = extract_hyperparameters(code)
+    body = request.get_json(force=True)
+    code = body.get("code", "")
+    method = body.get("method", "neural")  # Default to neural implementation
+    
+    print(f"\n===== RECEIVED EXTRACT REQUEST =====")
+    print(f"Method: {method}")
+    
+    params = extract_hyperparameters(code, method)
     return jsonify(params)
 
 @app.route("/explain", methods=["POST", "OPTIONS"])
