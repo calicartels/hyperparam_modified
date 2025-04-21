@@ -5,7 +5,7 @@ import "./popup.css";
 import "./popup-enhanced.css";
 
 // fallback to localhost if env var isn't set
-const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const BACKEND = "https://hyperexplainer-backend-695116221974.us-central1.run.app";
 console.log("[HyperExplainer][Popup] Using BACKEND =", BACKEND);
 
 type Param = { 

@@ -24,7 +24,7 @@ genai.configure(api_key=api_key)
 def extract_hyperparameters(code: str, method: str = "neural") -> dict:
     """
     Extract hyperparameters from code using different methods:
-    - neural: Uses Gemini to extract hyperparameters (original implementation, default)
+    - neural: Uses Finetuned Gemini to extract hyperparameters (original implementation, default)
     - classical: Uses a classical ML approach with feature extraction
     - naive: Simple mean model with basic regex pattern matching
     
@@ -39,20 +39,6 @@ def extract_hyperparameters(code: str, method: str = "neural") -> dict:
     prompt = f"""
 You are an expert ML engineer. Analyze the following machine learning code and identify ALL hyperparameters, including implicit ones.
 Return ONLY a valid JSON object where each key is a hyperparameter name and each value is its corresponding value.
-
-Include these specific types of hyperparameters:
-1. Explicit hyperparameters (like optimizer='adam', epochs=5)
-2. Network architecture parameters:
-   - Layer sizes (e.g., Dense(128) → "hidden_layer_size": 128)
-   - Output dimensions (e.g., Dense(10) → "output_layer_size": 10)
-   - Input shapes (e.g., input_shape=(28, 28) → "input_shape": "28,28")
-   - Activation functions
-   - Regularization settings (dropout rates)
-3. Data preprocessing parameters:
-   - Normalization factors (e.g., /255.0 → "normalization_factor": 255.0)
-   - Scaling values
-
-Use descriptive, specific names for implicit parameters to clearly indicate what they represent.
 
 Code:
 {code}
@@ -184,7 +170,6 @@ def extract_hyperparameters_classical(code: str) -> dict:
         # Convert to numpy array for calculations
         X = np.array(X)
         
-        # Calculate a confidence score as a weighted sum of features
         # These weights approximate a trained model's behavior
         weights = [0.6, 0.8, 0.9, 0.7, 0.5, -0.5, -0.4, -0.2]
         confidence_scores = np.dot(X, weights)
@@ -379,7 +364,7 @@ def predict_parameter_impact(name: str, value: str, additional_params: dict = No
     """
     Predicts model performance metrics for different parameter values
     Uses different approaches based on model_type:
-    - neural: Uses Gemini to predict (original implementation)
+    - neural: Uses Gemini finetuned to predict 
     - classical: Uses classical ML approach
     - naive: Uses simple mean model
     

@@ -77,7 +77,7 @@ interface CorrelationData {
 }
 
 // Pick up the backend URL from env or fall back to localhost
-const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const BACKEND = "https://hyperexplainer-backend-695116221974.us-central1.run.app";
 console.log("[HyperExplainer][Detail] Using BACKEND =", BACKEND);
 
 const getParam = (key: string) => {
