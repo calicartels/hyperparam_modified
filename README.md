@@ -23,6 +23,57 @@
   - Detail view for parameter exploration
   - Content script for code selection on any website
 
+## High-Level Visualization
+
+The following diagram shows the high-level architecture and data flow of the HyperExplainer system:
+
+![High-Level Architecture Visualization](./assets/high-level-viz.png)
+
+## Repository Structure
+
+```
+hyperparam_modified/
+├── assets/                     # Screenshots and images
+│   ├── popup.png
+│   ├── popup-on-chatgpt.png
+│   ├── explainer.png
+│   └── ... (other images)
+├── hyperexplainer/
+│   ├── backend/                # Python Flask server
+│   │   ├── app.py              # Main Flask application
+│   │   ├── hyperparams.py      # Core hyperparameter extraction logic
+│   │   ├── get_api_key.py      # Helper script for API setup
+│   │   ├── Dockerfile          # Container configuration
+│   │   ├── requirements.txt    # Python dependencies
+│   │   └── scripts/            # Utility scripts
+│   │       ├── test_hyperparams.py
+│   │       ├── test_env.py
+│   │       └── setup_gc_credentials.py
+│   ├── extension/              # Chrome extension
+│   │   ├── src/                # Frontend source code
+│   │   │   ├── popup/          # Extension popup interface
+│   │   │   │   ├── Popup.tsx   # Main popup component
+│   │   │   │   └── popup.css
+│   │   │   ├── detail/         # Detailed parameter view
+│   │   │   │   ├── Detail.tsx  # Parameter detail component
+│   │   │   │   └── detail.css
+│   │   │   ├── utils/          # Utility functions
+│   │   │   │   └── paramParser.ts
+│   │   │   ├── contentScript.ts # Content script for web page integration
+│   │   ├── popup.html      # Popup HTML template
+│   │   └── detail.html     # Detail view HTML template
+│   │   ├── public/             # Static assets
+│   │   │   └── manifest.json   # Extension manifest
+│   │   ├── vite.config.ts      # Build configuration
+│   │   ├── package.json        # Node dependencies
+│   │   └── tsconfig.json       # TypeScript configuration
+│   ├── .env                    # Environment variables
+│   ├── .env.example            # Example environment file
+│   ├── docker-compose.yml      # Docker compose setup
+│   └── README.md               # Project documentation
+└── hyperexplainer.zip          # Pre-built extension package
+```
+
 ## Key Features
 
 - **Parameter Detection**: Extract explicit and implicit hyperparameters from code using multiple methods:
@@ -55,6 +106,8 @@
   - User-created scenarios
 - Privacy-focused: Code snippets processed but not permanently stored
 
+
+
 ## Quick Start with Pre-built Version (If you can't find my extension in the google extensions market, probably because they've not approved it yet)
 
 The backend has been deployed at: https://hyperexplainer-backend-695116221974.us-central1.run.app
@@ -70,6 +123,11 @@ To use the pre-built extension:
 7. Go to ChatGPT and open a new chat
 8. Generate a sample code snippet or paste code
 9. Click on the extension - it should detect the code automatically
+
+
+### Video Walkthrough of the whole process :
+
+[![HyperExplainer Local Installation Walkthrough](https://img.youtube.com/vi/OIu3fjdiCAY/0.jpg)](https://youtu.be/xmQhxcoyIkg)
 
 ## To Start from Scratch (not necessary, but if you want to build it yourself)
 
@@ -152,51 +210,6 @@ The neural extraction approach uses a fine-tuned version of Google's Gemini 1.5 
 
 For more detailed information about these models, you can access the presentation at: https://www.canva.com/design/DAGlHl5xxmw/NV82VnZRhhw3WV3VxtwjWA/edit
 
-## Repository Structure
-
-```
-hyperparam_modified/
-├── assets/                     # Screenshots and images
-│   ├── popup.png
-│   ├── popup-on-chatgpt.png
-│   ├── explainer.png
-│   └── ... (other images)
-├── hyperexplainer/
-│   ├── backend/                # Python Flask server
-│   │   ├── app.py              # Main Flask application
-│   │   ├── hyperparams.py      # Core hyperparameter extraction logic
-│   │   ├── get_api_key.py      # Helper script for API setup
-│   │   ├── Dockerfile          # Container configuration
-│   │   ├── requirements.txt    # Python dependencies
-│   │   └── scripts/            # Utility scripts
-│   │       ├── test_hyperparams.py
-│   │       ├── test_env.py
-│   │       └── setup_gc_credentials.py
-│   ├── extension/              # Chrome extension
-│   │   ├── src/                # Frontend source code
-│   │   │   ├── popup/          # Extension popup interface
-│   │   │   │   ├── Popup.tsx   # Main popup component
-│   │   │   │   └── popup.css
-│   │   │   ├── detail/         # Detailed parameter view
-│   │   │   │   ├── Detail.tsx  # Parameter detail component
-│   │   │   │   └── detail.css
-│   │   │   ├── utils/          # Utility functions
-│   │   │   │   └── paramParser.ts
-│   │   │   ├── contentScript.ts # Content script for web page integration
-│   │   │   ├── popup.html      # Popup HTML template
-│   │   │   └── detail.html     # Detail view HTML template
-│   │   ├── public/             # Static assets
-│   │   │   └── manifest.json   # Extension manifest
-│   │   ├── vite.config.ts      # Build configuration
-│   │   ├── package.json        # Node dependencies
-│   │   └── tsconfig.json       # TypeScript configuration
-│   ├── .env                    # Environment variables
-│   ├── .env.example            # Example environment file
-│   ├── docker-compose.yml      # Docker compose setup
-│   └── README.md               # Project documentation
-└── hyperexplainer.zip          # Pre-built extension package
-```
-
 ## Development
 
 - Use `get_api_key.py` script to easily obtain a Gemini API key
@@ -267,7 +280,22 @@ Visual comparison of alternative parameter values:
 
 Project submission verification:
 
-![Submission Proof](../assets/submission-proof.png)
+![Submission Proof](./assets/submission-proof.png)
+
+### Model Training and Dataset
+
+The project uses fine-tuned models trained on curated datasets:
+
+![Deployed Model in Vertex AI](./assets/Deployed-model.png)
+*Custom model deployed in Google Vertex AI platform*
+
+![Fine-tuned Dataset](./assets/Finetuned-Dataset.png)
+*Dataset curated for training the hyperparameter extraction model*
+
+## Ethics Statement
+
+I take privacy and ethical considerations seriously. For complete details about data usage, privacy practices, and ethical guidelines, please refer to the [HyperExplainer Privacy Policy](https://docs.google.com/document/d/1Jfo2UKFxNhmxEZDnB4C2qLJyW2J9GYTB869ht-yAGtI/edit?tab=t.0#heading=h.qj52gzu8ztmg).
+
 
 ## References
 
