@@ -1,0 +1,31 @@
+# System files
+.DS_Store
+**/.DS_Store
+
+# Environment files
+.env
+**/.env
+.env.*
+**/.env.*
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.class
+
+# Credentials
+**/credentials/
+**/google-sa.json
+**/service-account.json
+
+# Build artifacts
+**/dist/
+**/build/
+**/*.egg-info/
+
+# Node modules
+**/node_modules/
+
+# Media files (large files)
+**/*.mp4

@@ -2,9 +2,10 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./popup.css";
+import "./popup-enhanced.css";
 
 // fallback to localhost if env var isn't set
-const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const BACKEND = "https://hyperexplainer-backend-695116221974.us-central1.run.app";
 console.log("[HyperExplainer][Popup] Using BACKEND =", BACKEND);
 
 type Param = { 
@@ -24,6 +25,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [groupedParams, setGroupedParams] = useState<Record<string, Param[]>>({});
+  // New state for extraction method
+  const [extractionMethod, setExtractionMethod] = useState<string>("neural");
   
   const [paramCategories] = useState<CategoryModel>({
     categories: {
@@ -132,6 +135,65 @@ function App() {
     }
   }, [params]);
 
+  // Function to extract hyperparameters - now depends on extractionMethod
+  const extractHyperparameters = async (snippet: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log(`[HyperExplainer][Popup] Sending extract request using method: ${extractionMethod}`);
+      
+      const resp = await fetch(`${BACKEND}/extract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          code: snippet,
+          method: extractionMethod // Include the selected method
+        }),
+      });
+
+      console.log("[HyperExplainer][Popup] HTTP status:", resp.status);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+
+      const data = (await resp.json()) as Record<string, string>;
+      console.log("[HyperExplainer][Popup] Extract response JSON:", data);
+
+      // Enhanced param mapping with dynamic categorization
+      const mapped = Object.entries(data).map(([name, value]) => {
+        // Handle null values
+        const safeValue = value === null ? "null" : String(value);
+        const category = categorizeParameter(name);
+        const impact = determineImpact(name);
+        const framework = determineFramework(name);
+        
+        return { 
+          name, 
+          value: safeValue, 
+          impact, 
+          framework,
+          category 
+        };
+      });
+      
+      // Store parameters to chrome storage for other components
+      try {
+        chrome.storage.local.set({ 
+          hyperparams: Object.fromEntries(mapped.map(p => [p.name, p.value]))
+        });
+      } catch (err) {
+        console.warn("Could not store params to chrome storage", err);
+      }
+      
+      setParams(mapped);
+    } catch (e: any) {
+      console.error("[HyperExplainer][Popup] Extract failed:", e);
+      setError(e.message || "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     console.log("[HyperExplainer][Popup] Popup mounted, reading storage");
     try {
@@ -146,57 +208,7 @@ function App() {
             return;
           }
 
-          try {
-            setLoading(true);
-            setError(null);
-            console.log("[HyperExplainer][Popup] Sending extract request to:", BACKEND + "/extract");
-            const resp = await fetch(`${BACKEND}/extract`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: snippet }),
-            });
-
-            console.log("[HyperExplainer][Popup] HTTP status:", resp.status);
-            if (!resp.ok) {
-              throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-            }
-
-            const data = (await resp.json()) as Record<string, string>;
-            console.log("[HyperExplainer][Popup] Extract response JSON:", data);
-
-            // Enhanced param mapping with dynamic categorization
-            const mapped = Object.entries(data).map(([name, value]) => {
-              // Handle null values
-              const safeValue = value === null ? "null" : String(value);
-              const category = categorizeParameter(name);
-              const impact = determineImpact(name);
-              const framework = determineFramework(name);
-              
-              return { 
-                name, 
-                value: safeValue, 
-                impact, 
-                framework,
-                category 
-              };
-            });
-            
-            // Store parameters to chrome storage for other components
-            try {
-              chrome.storage.local.set({ 
-                hyperparams: Object.fromEntries(mapped.map(p => [p.name, p.value]))
-              });
-            } catch (err) {
-              console.warn("Could not store params to chrome storage", err);
-            }
-            
-            setParams(mapped);
-          } catch (e: any) {
-            console.error("[HyperExplainer][Popup] Extract failed:", e);
-            setError(e.message || "Unknown error");
-          } finally {
-            setLoading(false);
-          }
+          extractHyperparameters(snippet);
         } catch (e) {
           console.error("[HyperExplainer][Popup] Error processing storage data:", e);
           setError("Error loading data. Please try again.");
@@ -209,6 +221,13 @@ function App() {
       setLoading(false);
     }
   }, []);
+
+  // Re-extract hyperparameters when extraction method changes
+  useEffect(() => {
+    if (code) {
+      extractHyperparameters(code);
+    }
+  }, [extractionMethod]);
 
   const openDetail = (p: Param) => {
     try {
@@ -266,15 +285,67 @@ function App() {
     </div>
   );
 
+  // Get badge text for extraction method
+  const getMethodBadgeText = () => {
+    switch (extractionMethod) {
+      case "naive": return "Naive Approach";
+      case "classical": return "Classical ML";
+      case "neural": return "Neural Network";
+      default: return "Neural Network";
+    }
+  };
+
   return (
     <div className="popup-container">
       <h1>HyperExplainer</h1>
       <p className="subtitle">AI-powered hyperparameter analysis</p>
 
+      {/* Extraction Method Selector */}
+      <div className="extraction-method">
+        <div className="extraction-label">Extraction Method:</div>
+        <div className="method-options">
+          <label className="method-option">
+            <input
+              type="radio"
+              name="extractionMethod"
+              value="neural"
+              checked={extractionMethod === "neural"}
+              onChange={() => setExtractionMethod("neural")}
+            />
+            <span>Neural Network (Deep Learning)</span>
+          </label>
+          <label className="method-option">
+            <input
+              type="radio"
+              name="extractionMethod"
+              value="classical"
+              checked={extractionMethod === "classical"}
+              onChange={() => setExtractionMethod("classical")}
+            />
+            <span>Classical ML (Feature-based)</span>
+          </label>
+          <label className="method-option">
+            <input
+              type="radio"
+              name="extractionMethod"
+              value="naive"
+              checked={extractionMethod === "naive"}
+              onChange={() => setExtractionMethod("naive")}
+            />
+            <span>Naive (Pattern Matching)</span>
+          </label>
+        </div>
+      </div>
+
       {!loading && !error && params.length > 0 && (
         <div className="info-row">
           <span className="info-icon">ℹ️</span>
-          <span className="info-text">Found {params.length} hyperparameters</span>
+          <span className="info-text">
+            Found {params.length} hyperparameters
+            <span className={`method-badge ${extractionMethod}`}>
+              {getMethodBadgeText()}
+            </span>
+          </span>
         </div>
       )}
 

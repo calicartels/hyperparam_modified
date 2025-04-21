@@ -6,16 +6,21 @@ from setup_gc_credentials import setupGoogleCloudCredentials
 # Include the new function in imports
 from hyperparams import extract_hyperparameters, explain_hyperparameter, predict_parameter_impact, generate_parameter_correlations
 
-# Load env from top‑level .env
-dotenv_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".env"
-)
-load_dotenv(dotenv_path)
+try:
+    dotenv_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        ".env"
+    )
+    if os.path.exists(dotenv_path):
+        load_dotenv(dotenv_path)
+        print(f"Loaded environment from {dotenv_path}")
+    else:
+        print("No .env file found, using environment variables")
+except Exception as e:
+    print(f"Warning: Could not load .env file: {e}")
 
 app = Flask(__name__)
-PORT = int(os.getenv("BACKEND_PORT", 3000))
-
+PORT = int(os.environ.get("PORT", 8080))
 # Google creds (optional)
 setupGoogleCloudCredentials()
 
@@ -47,8 +52,14 @@ def extract():
     if request.method == "OPTIONS":
         return make_response()
         
-    code = request.get_json(force=True).get("code", "")
-    params = extract_hyperparameters(code)
+    body = request.get_json(force=True)
+    code = body.get("code", "")
+    method = body.get("method", "neural")  # Default to neural implementation
+    
+    print(f"\n===== RECEIVED EXTRACT REQUEST =====")
+    print(f"Method: {method}")
+    
+    params = extract_hyperparameters(code, method)
     return jsonify(params)
 
 @app.route("/explain", methods=["POST", "OPTIONS"])
@@ -89,7 +100,6 @@ def explain():
         except Exception as e:
             print(f"Failed to parse JSON: {e}")
     
-    # If we get here, something went wrong
     print("ERROR: Could not parse explanation properly")
     # Return a simple fallback that includes the full error message
     return jsonify({
@@ -116,7 +126,6 @@ def parameter_correlations():
     print(f"\n===== RECEIVED PARAMETER_CORRELATIONS REQUEST =====")
     print(f"Parameters: {parameters}")
     
-    # Call a new function in hyperparams.py
     correlation_data = generate_parameter_correlations(parameters)
     return jsonify(correlation_data)
 
@@ -144,6 +153,6 @@ def predict_performance():
 if __name__ == "__main__":
     try:
         print(f"Starting server on port {PORT}...")
-        app.run(host="0.0.0.0", port=PORT, debug=True)
+        app.run(host="0.0.0.0", port=PORT, debug=False)
     except Exception as e:
         print(f"ERROR starting server: {e}")
