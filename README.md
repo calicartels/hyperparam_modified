@@ -254,25 +254,25 @@ Watch my detailed video walkthrough demonstrating the HyperExplainer in action.
 
 The popup interface allows quick parameter detection and analysis:
 
-![Extension Popup](../assets/popup.png)
+![Extension Popup](./assets/popup.png)
 
-![Popup on ChatGPT](../assets/popup-on-chatgpt.png)
+![Popup on ChatGPT](./assets/popup-on-chatgpt.png)
 
 ### Parameter Explainer View
 
 The detailed parameter explanation view provides in-depth analysis:
 
-![Parameter Explainer](../assets/explainer.png)
+![Parameter Explainer](./assets/explainer.png)
 
 ### Alternative Values Analysis
 
 Visual comparison of alternative parameter values:
 
-![Alternative Values 1](../assets/alt-values.png)
+![Alternative Values 1](./assets/alt-values.png)
 
-![Alternative Values 2](../assets/alt-values-2.png)
+![Alternative Values 2](./assets/alt-values-2.png)
 
-![Alternative Values 3](../assets/alt-values-3.png)
+![Alternative Values 3](./assets/alt-values-3.png)
 
 ### Verification
 
