@@ -3,7 +3,7 @@
 **HyperExplainer** is a Chrome extension with Python backend for explaining machine learning hyperparameters:
 
 - **Select** code on any webpage including ChatGPT
-- **Extract** hyperparameters using Google's Gemini 1.5 Flash LLM
+- **Extract** hyperparameters using Google's Finetuned Gemini 1.5 Flash LLM
 - **Visualize** parameter impacts with interactive charts
 - **Compare** different parameter configurations
 - **Understand** hyperparameter correlations and best practices
@@ -77,7 +77,7 @@ hyperparam_modified/
 ## Key Features
 
 - **Parameter Detection**: Extract explicit and implicit hyperparameters from code using multiple methods:
-  - Neural (Gemini LLM-based, ~90% accuracy): High accuracy, comprehensive detection
+  - Neural (Finetuned Gemini LLM-based, ~90% accuracy): High accuracy, comprehensive detection
   - Classical (feature-based extraction, ~75% accuracy): Balanced approach
   - Naive (regex-based, ~50% accuracy): Fastest method, simpler detection
 
@@ -193,7 +193,7 @@ To use the pre-built extension:
 
 ## Technologies
 
-- **Backend**: Flask, Python, Google Gemini 1.5 Flash LLM
+- **Backend**: Flask, Python, Google Gemini 1.5 Flash LLM (Finetuned)
 - **Frontend**: React, TypeScript, Chrome Extension API, Vite
 - **Visualization**: Chart.js
 - **Deployment**: Docker
@@ -205,8 +205,6 @@ The neural extraction approach uses a fine-tuned version of Google's Gemini 1.5 
 - gemini-1.5-flash (most recent versions)
 - hyperP
 - hyperparam-nn
-- hyperparam-new
-- hyperparam_model
 
 For more detailed information about these models, you can access the presentation at: https://www.canva.com/design/DAGlHl5xxmw/NV82VnZRhhw3WV3VxtwjWA/edit
 
